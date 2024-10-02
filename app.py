@@ -21,6 +21,10 @@ TRANSLATE_LIST = {
     "ja-JP": {"src": "ja", "target": "en"},
     "en-US": {"src": "en", "target": "ja"},
 }
+POLLY_PARAM = {
+    "en": {"voice_id": "Ruth", "language_code": "en-US", "engine": "generative"},
+    "ja": {"voice_id": "Takumi", "language_code": "ja-JP", "engine": "neural"},
+}
 
 
 class MyEventHandler(TranscriptResultStreamHandler):
@@ -75,6 +79,28 @@ def translate(text: str, src_lang: str, target_lang: str) -> str:
     return response["TranslatedText"]
 
 
+def polly(text: str, language_code: str, voice_id: str, engine: str):
+
+    polly_client = boto3.client("polly")
+    response = polly_client.synthesize_speech(
+        Engine=engine,
+        LanguageCode=language_code,
+        Text=text,
+        OutputFormat="mp3",
+        VoiceId=voice_id,
+    )
+
+    audio_stream = response["AudioStream"]
+
+    import tempfile
+
+    _, tmp_file = tempfile.mkstemp()
+    with open(tmp_file, mode="wb") as f:
+        f.write(audio_stream.read())
+
+    return tmp_file
+
+
 async def transcribe_fn(
     language: str,
     filepath: str,
@@ -96,7 +122,12 @@ async def transcribe_fn(
             TRANSLATE_LIST[LANGUAGE_LIST[language]]["target"],
         )
 
-    return transcribe_text, translate_text
+    polly_audio = None
+    if len(translate_text) > 0:
+        param = POLLY_PARAM[TRANSLATE_LIST[LANGUAGE_LIST[language]]["target"]]
+        polly_audio = polly(translate_text, **param)
+
+    return transcribe_text, translate_text, polly_audio
 
 
 demo = gr.Interface(
@@ -108,6 +139,7 @@ demo = gr.Interface(
     outputs=[
         gr.TextArea(label="Transcribe（文字起こし）"),
         gr.TextArea(label="Translate（翻訳）"),
+        gr.Audio(type="filepath", format="mp3", label="Polly（音声合成）"),
     ],
     allow_flagging="never",
 )
