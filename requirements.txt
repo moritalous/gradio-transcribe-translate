@@ -1,0 +1,4 @@
+aiofile
+amazon-transcribe
+boto3
+gradio
